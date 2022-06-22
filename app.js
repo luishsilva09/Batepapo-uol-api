@@ -1,8 +1,10 @@
 import express from "express";
 import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
+import dayjs from "dayjs";
 
 dotenv.config();
+let now = dayjs().format("HH:mm:ss");
 
 const client = new MongoClient(process.env.URL_CONECT_MONGO);
 let db;
@@ -24,9 +26,19 @@ app.post("/participants", (request, response) => {
       response.sendStatus(409);
     } else {
       //salva o dado no banco
-      db.collection("participantes")
-        .insertOne({ name: request.body.name, lastStatus: Date.now() })
-        .then(response.send("ok"));
+      db.collection("participantes").insertOne({
+        name: request.body.name,
+        lastStatus: Date.now(),
+      });
+
+      db.collection("mensagem").insertOne({
+        from: request.body.name,
+        to: "Todos",
+        text: "entra na sala...",
+        type: "status",
+        time: now,
+      });
+      response.sendStatus(201);
     }
   }
 });
