@@ -62,4 +62,33 @@ app.post("/messages", (request, response) => {
     .then(() => response.sendStatus(201));
 });
 
+app.get("/messages", (request, response) => {
+  let limit = request.query.limit;
+
+  db.collection("mensagem")
+    .find()
+    .toArray()
+    .then((mensagem) => exibirMensagem(mensagem));
+
+  function exibirMensagem(mensagem) {
+    let mensagens = mensagem
+      .reverse()
+      .filter(
+        (elemento) =>
+          elemento.to === "Todos" || elemento.to === request.headers.user
+      );
+    console.log(mensagens);
+    if (limit) {
+      let render = [];
+      for (let i = 0; i < limit; i++) {
+        if (mensagens[i] == null) break;
+        render.push(mensagens[i]);
+      }
+      response.send(render);
+    } else {
+      response.send(mensagens);
+    }
+  }
+});
+
 app.listen(process.env.PORT, () => console.log("Servidor online"));
