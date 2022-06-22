@@ -50,4 +50,16 @@ app.get("/participants", (request, response) => {
     .then((contatos) => response.send(contatos));
 });
 
+app.post("/messages", (request, response) => {
+  db.collection("mensagem")
+    .insertOne({
+      from: request.headers.user,
+      to: request.body.to,
+      text: request.body.text,
+      type: request.body.type,
+      time: now,
+    })
+    .then(() => response.sendStatus(201));
+});
+
 app.listen(process.env.PORT, () => console.log("Servidor online"));
