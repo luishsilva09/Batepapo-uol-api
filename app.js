@@ -6,6 +6,7 @@ import cors from "cors";
 
 dotenv.config();
 let now = dayjs().format("HH:mm:ss");
+const MAX_TEMPO_INATIVO = 10000;
 
 const client = new MongoClient(process.env.URL_CONECT_MONGO);
 let db;
@@ -129,7 +130,7 @@ setInterval(async () => {
     .toArray();
   listaParticipantes.map((participante) => {
     let tempoInativo = Date.now() - participante.lastStatus;
-    if (tempoInativo > 10000) {
+    if (tempoInativo > MAX_TEMPO_INATIVO) {
       db.collection("participantes").deleteOne({ name: participante.name });
       db.collection("mensagem").insertOne({
         from: participante.name,
