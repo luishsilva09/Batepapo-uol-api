@@ -80,13 +80,15 @@ app.get("/messages", async (request, response) => {
       .reverse()
       .filter(
         (elemento) =>
-          elemento.to === "Todos" || elemento.to === request.headers.user
+          elemento.to === "Todos" ||
+          elemento.to === request.headers.user ||
+          elemento.from === request.headers.user
       );
     if (limit) {
       let render = [];
       for (let i = 0; i < limit; i++) {
         if (mensagens[i] == null) break;
-        render.push(mensagens[i]);
+        render.unshift(mensagens[i]);
       }
       response.send(render);
     } else {
