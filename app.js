@@ -2,6 +2,7 @@ import express from "express";
 import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
 import dayjs from "dayjs";
+import cors from "cors";
 
 dotenv.config();
 let now = dayjs().format("HH:mm:ss");
@@ -14,24 +15,23 @@ client.connect().then(() => {
 
 const app = express();
 app.use(express.json());
+app.use(cors());
 
-app.post("/participants", (request, response) => {
-  //verifica se já existe o usuario
-  db.collection("participantes")
-    .findOne({ name: request.body.name })
-    .then((find) => cadastro(find));
+app.post("/participants", async (request, response) => {
+  try {
+    const usuarioExistente = await db
+      .collection("participantes")
+      .findOne({ name: request.body.name });
 
-  function cadastro(find) {
-    if (find) {
+    if (usuarioExistente) {
       response.sendStatus(409);
     } else {
-      //salva o dado no banco
-      db.collection("participantes").insertOne({
+      await db.collection("participantes").insertOne({
         name: request.body.name,
         lastStatus: Date.now(),
       });
 
-      db.collection("mensagem").insertOne({
+      await db.collection("mensagem").insertOne({
         from: request.body.name,
         to: "Todos",
         text: "entra na sala...",
@@ -40,44 +40,48 @@ app.post("/participants", (request, response) => {
       });
       response.sendStatus(201);
     }
+  } catch (error) {
+    response.sendStatus(500);
   }
 });
 
-app.get("/participants", (request, response) => {
-  db.collection("participantes")
-    .find()
-    .toArray()
-    .then((contatos) => response.send(contatos));
+app.get("/participants", async (request, response) => {
+  try {
+    const listaParticipantes = await db
+      .collection("participantes")
+      .find()
+      .toArray();
+    response.send(listaParticipantes);
+  } catch (error) {
+    response.sendStatus(500);
+  }
 });
 
-app.post("/messages", (request, response) => {
-  db.collection("mensagem")
-    .insertOne({
+app.post("/messages", async (request, response) => {
+  try {
+    await db.collection("mensagem").insertOne({
       from: request.headers.user,
       to: request.body.to,
       text: request.body.text,
       type: request.body.type,
       time: now,
-    })
-    .then(() => response.sendStatus(201));
+    });
+    response.sendStatus(201);
+  } catch (error) {
+    response.sendStatus(500);
+  }
 });
 
-app.get("/messages", (request, response) => {
-  let limit = request.query.limit;
-
-  db.collection("mensagem")
-    .find()
-    .toArray()
-    .then((mensagem) => exibirMensagem(mensagem));
-
-  function exibirMensagem(mensagem) {
+app.get("/messages", async (request, response) => {
+  try {
+    let limit = request.query.limit;
+    const mensagem = await db.collection("mensagem").find().toArray();
     let mensagens = mensagem
       .reverse()
       .filter(
         (elemento) =>
           elemento.to === "Todos" || elemento.to === request.headers.user
       );
-    console.log(mensagens);
     if (limit) {
       let render = [];
       for (let i = 0; i < limit; i++) {
@@ -86,9 +90,54 @@ app.get("/messages", (request, response) => {
       }
       response.send(render);
     } else {
-      response.send(mensagens);
+      response.send(mensagens.reverse());
     }
+  } catch (error) {
+    response.sendStatus(500);
   }
 });
+
+app.post("/status", async (request, response) => {
+  try {
+    const usuario = request.headers.user;
+    const usuarioNaLista = await db
+      .collection("participantes")
+      .findOne({ name: usuario });
+    if (!usuarioNaLista) {
+      response.sendStatus(404);
+    } else {
+      await db
+        .collection("participantes")
+        .findOneAndUpdate(
+          { name: usuario },
+          { $set: { lastStatus: Date.now() } }
+        );
+      response.sendStatus(200);
+    }
+  } catch (error) {
+    response.sendStatus(500);
+  }
+});
+
+//usuario inativo
+setInterval(async () => {
+  const listaParticipantes = await db
+    .collection("participantes")
+    .find()
+    .toArray();
+  listaParticipantes.map((participante) => {
+    let tempoInativo = Date.now() - participante.lastStatus;
+    if (tempoInativo > 10000) {
+      db.collection("participantes").deleteOne({ name: participante.name });
+      db.collection("mensagem").insertOne({
+        from: participante.name,
+        to: "Todos",
+        text: "sai da sala...",
+        type: "status",
+        time: now,
+      });
+    }
+  });
+}, 15000);
 
 app.listen(process.env.PORT, () => console.log("Servidor online"));
