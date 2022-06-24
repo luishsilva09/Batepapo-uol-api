@@ -3,6 +3,7 @@ import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
 import dayjs from "dayjs";
 import cors from "cors";
+import joi from "joi";
 
 dotenv.config();
 let now = dayjs().format("HH:mm:ss");
@@ -18,8 +19,18 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+const participantesSchema = joi.object({
+  name: joi.string().required(),
+});
+
 app.post("/participants", async (request, response) => {
   try {
+    const valida = participantesSchema.validate(request.body);
+    if (valida.error) {
+      response.sendStatus(422);
+      return;
+    }
+
     const usuarioExistente = await db
       .collection("participantes")
       .findOne({ name: request.body.name });
