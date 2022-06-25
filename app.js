@@ -1,14 +1,15 @@
 import express from "express";
-import { ConnectionCheckOutFailedEvent, MongoClient, ObjectId } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 import dayjs from "dayjs";
 import cors from "cors";
 import joi from "joi";
 
 dotenv.config();
-let now = dayjs().format("HH:mm:ss");
+
 const MAX_TEMPO_INATIVO = 10000;
 let listaParticipantes = [];
+
 const client = new MongoClient(process.env.URL_CONECT_MONGO);
 let db;
 client.connect().then(() => {
@@ -19,10 +20,23 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+//valiadar usuario
 const participantesSchema = joi.object({
   name: joi.string().trim().required(),
 });
 
+function now() {
+  return dayjs().format("HH:mm:ss");
+}
+async function atualizarLista() {
+  const users = await db.collection("participantes").find().toArray();
+  listaParticipantes = [];
+  users.filter((e) => {
+    listaParticipantes.push(e.name);
+  });
+}
+
+//validar mensagem enviada
 const mensagemSchema = joi.object({
   from: joi
     .string()
@@ -38,6 +52,7 @@ const mensagemSchema = joi.object({
   time: joi.string().required(),
 });
 
+//entrar
 app.post("/participants", async (request, response) => {
   try {
     const valida = participantesSchema.validate(request.body);
@@ -64,7 +79,7 @@ app.post("/participants", async (request, response) => {
         to: "Todos",
         text: "entra na sala...",
         type: "status",
-        time: now,
+        time: now(),
       });
       response.sendStatus(201);
     }
@@ -73,6 +88,7 @@ app.post("/participants", async (request, response) => {
   }
 });
 
+//buscar lisata de participantes
 app.get("/participants", async (request, response) => {
   try {
     const listaParticipantes = await db
@@ -85,30 +101,27 @@ app.get("/participants", async (request, response) => {
   }
 });
 
+//enviar mensagem
 app.post("/messages", async (request, response) => {
+  await atualizarLista();
+
   const dados = {
     from: request.headers.user,
     to: request.body.to,
     text: request.body.text,
     type: request.body.type,
-    time: now,
+    time: now(),
   };
-
-  const users = await db.collection("participantes").find().toArray();
-  listaParticipantes = [];
-  users.filter((e) => {
-    listaParticipantes.push(e.name);
-  });
 
   const valida = mensagemSchema.validate(dados, {
     abortEarly: false,
   });
-  console.log(valida.error);
   if (valida.error) {
     response.sendStatus(422);
     return;
   }
   try {
+    console.log(dados);
     await db.collection("mensagem").insertOne(dados);
     response.sendStatus(201);
   } catch (error) {
@@ -116,6 +129,7 @@ app.post("/messages", async (request, response) => {
   }
 });
 
+//buscar mensagens
 app.get("/messages", async (request, response) => {
   try {
     let limit = request.query.limit;
@@ -143,6 +157,7 @@ app.get("/messages", async (request, response) => {
   }
 });
 
+//verificar se usuario esta online
 app.post("/status", async (request, response) => {
   try {
     const usuario = request.headers.user;
@@ -165,6 +180,7 @@ app.post("/status", async (request, response) => {
   }
 });
 
+//deletar mensagem
 app.delete("/messages/:id", async (request, response) => {
   try {
     const usuario = request.headers.user;
@@ -173,6 +189,7 @@ app.delete("/messages/:id", async (request, response) => {
     const existeMensagem = await db
       .collection("mensagem")
       .findOne({ _id: new ObjectId(id) });
+
     if (existeMensagem && existeMensagem.from === usuario) {
       await db.collection("mensagem").deleteOne({ _id: new ObjectId(id) });
       response.sendStatus(200);
@@ -189,8 +206,46 @@ app.delete("/messages/:id", async (request, response) => {
   }
 });
 
-app.put("/messages/id", (request, response) => {
+//atualizar menssagem
+app.put("/messages/:id", async (request, response) => {
+  await atualizarLista();
+
+  const dados = {
+    from: request.headers.user,
+    to: request.body.to,
+    text: request.body.text,
+    type: request.body.type,
+    time: now(),
+  };
+
+  const valida = mensagemSchema.validate(dados, {
+    abortEarly: false,
+  });
+  if (valida.error) {
+    response.sendStatus(422);
+    return;
+  }
   try {
+    const usuario = request.headers.user;
+    const id = request.params.id;
+
+    const existeMensagem = await db
+      .collection("mensagem")
+      .findOne({ _id: new ObjectId(id) });
+
+    if (existeMensagem && existeMensagem.from === usuario) {
+      await db
+        .collection("mensagem")
+        .updateOne({ _id: new ObjectId(id) }, { $set: dados });
+      response.sendStatus(200);
+      return;
+    }
+    if (existeMensagem.from !== usuario) {
+      response.sendStatus(401);
+      return;
+    } else {
+      response.sendStatus(404);
+    }
   } catch {
     response.sendStatus(500);
   }
