@@ -8,7 +8,7 @@ import joi from "joi";
 dotenv.config();
 let now = dayjs().format("HH:mm:ss");
 const MAX_TEMPO_INATIVO = 10000;
-
+let listaParticipantes = [];
 const client = new MongoClient(process.env.URL_CONECT_MONGO);
 let db;
 client.connect().then(() => {
@@ -23,20 +23,15 @@ const participantesSchema = joi.object({
   name: joi.string().trim().required(),
 });
 
-const validaFrom = async (value, helpers) => {
-  const usuarioExistente = await db
-    .collection("participantes")
-    .findOne({ name: value });
-
-  if (!usuarioExistente) {
-    console.log("nao existe");
-    return helpers.error(422);
-  } else {
-    console.log("existe");
-  }
-};
 const mensagemSchema = joi.object({
-  from: joi.string().valid().required(),
+  from: joi
+    .string()
+    .custom((value, helpers) => {
+      if (!listaParticipantes.includes(value)) {
+        return helpers.error(422);
+      }
+    })
+    .required(),
   to: joi.string().trim().required(),
   text: joi.string().trim().required(),
   type: joi.string().valid("message", "private_message"),
@@ -98,8 +93,16 @@ app.post("/messages", async (request, response) => {
     type: request.body.type,
     time: now,
   };
+  const users = await db.collection("participantes").find().toArray();
+  listaParticipantes = [];
+  users.filter((e) => {
+    listaParticipantes.push(e.name);
+  });
 
-  const valida = mensagemSchema.validate(dados);
+  const valida = mensagemSchema.validate(dados, {
+    abortEarly: false,
+  });
+  console.log(valida.error);
   if (valida.error) {
     response.sendStatus(422);
     return;
@@ -172,13 +175,22 @@ app.delete("/messages/:id", async (request, response) => {
     if (existeMensagem && existeMensagem.from === usuario) {
       await db.collection("mensagem").deleteOne({ _id: new ObjectId(id) });
       response.sendStatus(200);
+      return;
     }
     if (existeMensagem.from !== usuario) {
       response.sendStatus(401);
+      return;
     } else {
       response.sendStatus(404);
     }
   } catch (error) {
+    response.sendStatus(500);
+  }
+});
+
+app.put("/messages/id", (request, response) => {
+  try {
+  } catch {
     response.sendStatus(500);
   }
 });
