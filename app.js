@@ -1,5 +1,5 @@
 import express from "express";
-import { ConnectionCheckOutFailedEvent, MongoClient } from "mongodb";
+import { ConnectionCheckOutFailedEvent, MongoClient, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 import dayjs from "dayjs";
 import cors from "cors";
@@ -155,6 +155,28 @@ app.post("/status", async (request, response) => {
           { $set: { lastStatus: Date.now() } }
         );
       response.sendStatus(200);
+    }
+  } catch (error) {
+    response.sendStatus(500);
+  }
+});
+
+app.delete("/messages/:id", async (request, response) => {
+  try {
+    const usuario = request.headers.user;
+    const id = request.params.id;
+
+    const existeMensagem = await db
+      .collection("mensagem")
+      .findOne({ _id: new ObjectId(id) });
+    if (existeMensagem && existeMensagem.from === usuario) {
+      await db.collection("mensagem").deleteOne({ _id: new ObjectId(id) });
+      response.sendStatus(200);
+    }
+    if (existeMensagem.from !== usuario) {
+      response.sendStatus(401);
+    } else {
+      response.sendStatus(404);
     }
   } catch (error) {
     response.sendStatus(500);
