@@ -1,5 +1,5 @@
 import express from "express";
-import { MongoClient } from "mongodb";
+import { ConnectionCheckOutFailedEvent, MongoClient } from "mongodb";
 import dotenv from "dotenv";
 import dayjs from "dayjs";
 import cors from "cors";
@@ -20,7 +20,27 @@ app.use(express.json());
 app.use(cors());
 
 const participantesSchema = joi.object({
-  name: joi.string().required(),
+  name: joi.string().trim().required(),
+});
+
+const validaFrom = async (value, helpers) => {
+  const usuarioExistente = await db
+    .collection("participantes")
+    .findOne({ name: value });
+
+  if (!usuarioExistente) {
+    console.log("nao existe");
+    return helpers.error(422);
+  } else {
+    console.log("existe");
+  }
+};
+const mensagemSchema = joi.object({
+  from: joi.string().valid().required(),
+  to: joi.string().trim().required(),
+  text: joi.string().trim().required(),
+  type: joi.string().valid("message", "private_message"),
+  time: joi.string().required(),
 });
 
 app.post("/participants", async (request, response) => {
@@ -29,6 +49,7 @@ app.post("/participants", async (request, response) => {
     if (valida.error) {
       response.sendStatus(422);
       return;
+    } else {
     }
 
     const usuarioExistente = await db
@@ -70,14 +91,21 @@ app.get("/participants", async (request, response) => {
 });
 
 app.post("/messages", async (request, response) => {
+  const dados = {
+    from: request.headers.user,
+    to: request.body.to,
+    text: request.body.text,
+    type: request.body.type,
+    time: now,
+  };
+
+  const valida = mensagemSchema.validate(dados);
+  if (valida.error) {
+    response.sendStatus(422);
+    return;
+  }
   try {
-    await db.collection("mensagem").insertOne({
-      from: request.headers.user,
-      to: request.body.to,
-      text: request.body.text,
-      type: request.body.type,
-      time: now,
-    });
+    await db.collection("mensagem").insertOne(dados);
     response.sendStatus(201);
   } catch (error) {
     response.sendStatus(500);
@@ -122,8 +150,8 @@ app.post("/status", async (request, response) => {
     } else {
       await db
         .collection("participantes")
-        .findOneAndUpdate(
-          { name: usuario },
+        .updateOne(
+          { _id: usuarioNaLista._id },
           { $set: { lastStatus: Date.now() } }
         );
       response.sendStatus(200);
