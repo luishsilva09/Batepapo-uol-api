@@ -93,6 +93,7 @@ app.post("/messages", async (request, response) => {
     type: request.body.type,
     time: now,
   };
+
   const users = await db.collection("participantes").find().toArray();
   listaParticipantes = [];
   users.filter((e) => {
