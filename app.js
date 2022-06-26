@@ -103,27 +103,26 @@ app.get("/participants", async (request, response) => {
 
 //enviar mensagem
 app.post("/messages", async (request, response) => {
-  await atualizarLista();
-
-  const dados = {
-    from: request.headers.user,
-    to: request.body.to,
-    text: request.body.text,
-    type: request.body.type,
-    time: now(),
-  };
-
-  const valida = mensagemSchema.validate(dados, {
-    abortEarly: false,
-  });
-  if (valida.error) {
-    response.sendStatus(422);
-    return;
-  }
   try {
-    console.log(dados);
-    await db.collection("mensagem").insertOne(dados);
-    response.sendStatus(201);
+    await atualizarLista();
+
+    const dados = {
+      from: request.headers.user,
+      to: request.body.to,
+      text: request.body.text,
+      type: request.body.type,
+      time: now(),
+    };
+
+    const valida = mensagemSchema.validate(dados, {
+      abortEarly: false,
+    });
+    if (valida.error) {
+      response.sendStatus(422);
+    } else {
+      await db.collection("mensagem").insertOne(dados);
+      response.sendStatus(201);
+    }
   } catch (error) {
     response.sendStatus(500);
   }
@@ -180,27 +179,35 @@ app.post("/status", async (request, response) => {
   }
 });
 
+async function editarOuDeletar(acao, usuario, id, dados) {
+  const existeMensagem = await db
+    .collection("mensagem")
+    .findOne({ _id: new ObjectId(id) });
+
+  if (existeMensagem && existeMensagem.from === usuario && acao === "put") {
+    await db
+      .collection("mensagem")
+      .updateOne({ _id: new ObjectId(id) }, { $set: dados });
+    return 200;
+  }
+  if (existeMensagem && existeMensagem.from === usuario && acao == "delete") {
+    await db.collection("mensagem").deleteOne({ _id: new ObjectId(id) });
+    return 200;
+  }
+  if (existeMensagem.from !== usuario) {
+    return 401;
+  } else {
+    return 404;
+  }
+}
+
 //deletar mensagem
 app.delete("/messages/:id", async (request, response) => {
   try {
     const usuario = request.headers.user;
     const id = request.params.id;
-
-    const existeMensagem = await db
-      .collection("mensagem")
-      .findOne({ _id: new ObjectId(id) });
-
-    if (existeMensagem && existeMensagem.from === usuario) {
-      await db.collection("mensagem").deleteOne({ _id: new ObjectId(id) });
-      response.sendStatus(200);
-      return;
-    }
-    if (existeMensagem.from !== usuario) {
-      response.sendStatus(401);
-      return;
-    } else {
-      response.sendStatus(404);
-    }
+    const resposta = await editarOuDeletar("delete", usuario, id);
+    response.sendStatus(resposta);
   } catch (error) {
     response.sendStatus(500);
   }
@@ -208,44 +215,28 @@ app.delete("/messages/:id", async (request, response) => {
 
 //atualizar menssagem
 app.put("/messages/:id", async (request, response) => {
-  await atualizarLista();
-
-  const dados = {
-    from: request.headers.user,
-    to: request.body.to,
-    text: request.body.text,
-    type: request.body.type,
-    time: now(),
-  };
-
-  const valida = mensagemSchema.validate(dados, {
-    abortEarly: false,
-  });
-  if (valida.error) {
-    response.sendStatus(422);
-    return;
-  }
   try {
+    await atualizarLista();
     const usuario = request.headers.user;
     const id = request.params.id;
+    const dados = {
+      from: request.headers.user,
+      to: request.body.to,
+      text: request.body.text,
+      type: request.body.type,
+      time: now(),
+    };
 
-    const existeMensagem = await db
-      .collection("mensagem")
-      .findOne({ _id: new ObjectId(id) });
-
-    if (existeMensagem && existeMensagem.from === usuario) {
-      await db
-        .collection("mensagem")
-        .updateOne({ _id: new ObjectId(id) }, { $set: dados });
-      response.sendStatus(200);
+    const valida = mensagemSchema.validate(dados, {
+      abortEarly: false,
+    });
+    if (valida.error) {
+      response.sendStatus(422);
       return;
     }
-    if (existeMensagem.from !== usuario) {
-      response.sendStatus(401);
-      return;
-    } else {
-      response.sendStatus(404);
-    }
+
+    const resposta = await editarOuDeletar("put", usuario, id, dados);
+    response.sendStatus(resposta);
   } catch {
     response.sendStatus(500);
   }
@@ -261,12 +252,13 @@ setInterval(async () => {
     let tempoInativo = Date.now() - participante.lastStatus;
     if (tempoInativo > MAX_TEMPO_INATIVO) {
       db.collection("participantes").deleteOne({ name: participante.name });
+
       db.collection("mensagem").insertOne({
         from: participante.name,
         to: "Todos",
         text: "sai da sala...",
         type: "status",
-        time: now,
+        time: now(),
       });
     }
   });
