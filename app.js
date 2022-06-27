@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import dayjs from "dayjs";
 import cors from "cors";
 import joi from "joi";
+import { stripHtml } from "string-strip-html";
 
 dotenv.config();
 
