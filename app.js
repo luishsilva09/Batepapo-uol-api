@@ -4,7 +4,6 @@ import dotenv from "dotenv";
 import dayjs from "dayjs";
 import cors from "cors";
 import joi from "joi";
-import { stripHtml } from "string-strip-html";
 
 dotenv.config();
 
@@ -21,7 +20,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-//valiadar usuario
+// valiadar usuario
 const participantesSchema = joi.object({
   name: joi.string().trim().required(),
 });
@@ -34,10 +33,11 @@ async function atualizarLista() {
   listaParticipantes = [];
   users.filter((e) => {
     listaParticipantes.push(e.name);
+    return true;
   });
 }
 
-//validar mensagem enviada
+// validar mensagem enviada
 const mensagemSchema = joi.object({
   from: joi
     .string()
@@ -45,6 +45,7 @@ const mensagemSchema = joi.object({
       if (!listaParticipantes.includes(value)) {
         return helpers.error(422);
       }
+      return value;
     })
     .required(),
   to: joi.string().trim().required(),
@@ -53,14 +54,13 @@ const mensagemSchema = joi.object({
   time: joi.string().required(),
 });
 
-//entrar
+// entrar
 app.post("/participants", async (request, response) => {
   try {
     const valida = participantesSchema.validate(request.body);
     if (valida.error) {
       response.sendStatus(422);
       return;
-    } else {
     }
 
     const usuarioExistente = await db
@@ -89,20 +89,17 @@ app.post("/participants", async (request, response) => {
   }
 });
 
-//buscar lisata de participantes
+// buscar lisata de participantes
 app.get("/participants", async (request, response) => {
   try {
-    const listaParticipantes = await db
-      .collection("participantes")
-      .find()
-      .toArray();
-    response.send(listaParticipantes);
+    const Participantes = await db.collection("participantes").find().toArray();
+    response.send(Participantes);
   } catch (error) {
     response.sendStatus(500);
   }
 });
 
-//enviar mensagem
+// enviar mensagem
 app.post("/messages", async (request, response) => {
   try {
     await atualizarLista();
@@ -129,12 +126,12 @@ app.post("/messages", async (request, response) => {
   }
 });
 
-//buscar mensagens
+// buscar mensagens
 app.get("/messages", async (request, response) => {
   try {
-    let limit = request.query.limit;
+    const { limit } = request.query;
     const mensagem = await db.collection("mensagem").find().toArray();
-    let mensagens = mensagem
+    const mensagens = mensagem
       .reverse()
       .filter(
         (elemento) =>
@@ -144,8 +141,8 @@ app.get("/messages", async (request, response) => {
           elemento.from === request.headers.user
       );
     if (limit) {
-      let render = [];
-      for (let i = 0; i < limit; i++) {
+      const render = [];
+      for (let i = 0; i < limit; i += 1) {
         if (mensagens[i] == null) break;
         render.unshift(mensagens[i]);
       }
@@ -158,7 +155,7 @@ app.get("/messages", async (request, response) => {
   }
 });
 
-//verificar se usuario esta online
+// verificar se usuario esta online
 app.post("/status", async (request, response) => {
   try {
     const usuario = request.headers.user;
@@ -192,22 +189,21 @@ async function editarOuDeletar(acao, usuario, id, dados) {
       .updateOne({ _id: new ObjectId(id) }, { $set: dados });
     return 200;
   }
-  if (existeMensagem && existeMensagem.from === usuario && acao == "delete") {
+  if (existeMensagem && existeMensagem.from === usuario && acao === "delete") {
     await db.collection("mensagem").deleteOne({ _id: new ObjectId(id) });
     return 200;
   }
   if (existeMensagem.from !== usuario) {
     return 401;
-  } else {
-    return 404;
   }
+  return 404;
 }
 
-//deletar mensagem
+// deletar mensagem
 app.delete("/messages/:id", async (request, response) => {
   try {
     const usuario = request.headers.user;
-    const id = request.params.id;
+    const { id } = request.params;
     const resposta = await editarOuDeletar("delete", usuario, id);
     response.sendStatus(resposta);
   } catch (error) {
@@ -215,12 +211,12 @@ app.delete("/messages/:id", async (request, response) => {
   }
 });
 
-//atualizar menssagem
+// atualizar menssagem
 app.put("/messages/:id", async (request, response) => {
   try {
     await atualizarLista();
     const usuario = request.headers.user;
-    const id = request.params.id;
+    const { id } = request.params;
     const dados = {
       from: request.headers.user,
       to: request.body.to,
@@ -244,14 +240,11 @@ app.put("/messages/:id", async (request, response) => {
   }
 });
 
-//usuario inativo
+// usuario inativo
 setInterval(async () => {
-  const listaParticipantes = await db
-    .collection("participantes")
-    .find()
-    .toArray();
-  listaParticipantes.map((participante) => {
-    let tempoInativo = Date.now() - participante.lastStatus;
+  const participantes = await db.collection("participantes").find().toArray();
+  participantes.map((participante) => {
+    const tempoInativo = Date.now() - participante.lastStatus;
     if (tempoInativo > MAX_TEMPO_INATIVO) {
       db.collection("participantes").deleteOne({ name: participante.name });
 
@@ -263,6 +256,7 @@ setInterval(async () => {
         time: now(),
       });
     }
+    return true;
   });
 }, 15000);
 
