@@ -138,6 +138,7 @@ app.get("/messages", async (request, response) => {
       .filter(
         (elemento) =>
           elemento.to === "Todos" ||
+          elemento.type === "message" ||
           elemento.to === request.headers.user ||
           elemento.from === request.headers.user
       );
